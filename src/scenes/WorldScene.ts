@@ -6,40 +6,43 @@ import {
   guessScheme,
   saveScheme,
 } from '../systems/Controls';
-
-const TILE = 16;
-const SPEED = 120;
+import { TILE, SOLID_TILES, T, Facing } from '../systems/textures';
+import { GridMovement } from '../systems/GridMovement';
+import { MAPS, MapDef } from '../data/maps';
 
 export class WorldScene extends Phaser.Scene {
-  private player!: Phaser.GameObjects.Rectangle;
+  private player!: Phaser.GameObjects.Sprite;
+  private mover!: GridMovement;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private moveKeys!: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
+  private moveKeys!: Record<Facing, Phaser.Input.Keyboard.Key>;
   private scheme!: ControlScheme;
   private hint!: Phaser.GameObjects.Text;
+
+  private map!: Phaser.Tilemaps.Tilemap;
+  private def!: MapDef;
+  private transitioning = false;
 
   constructor() {
     super('world');
   }
 
   create() {
-    this.drawGrid();
-
-    this.player = this.add.rectangle(240, 160, TILE, TILE, 0xff2fd6);
-    this.physics.add.existing(this.player);
-    (this.player.body as Phaser.Physics.Arcade.Body).setCollideWorldBounds(true);
-
     this.cursors = this.input.keyboard!.createCursorKeys();
 
+    this.player = this.add.sprite(0, 0, 'player-down').setDepth(10);
+
+    this.loadMap('street');
+
     this.hint = this.add
-      .text(240, 12, '', {
+      .text(6, 6, '', {
         fontFamily: 'monospace',
         fontSize: '10px',
         color: '#4ef3ff',
       })
-      .setOrigin(0.5, 0);
+      .setScrollFactor(0)
+      .setDepth(100);
 
     this.applyScheme(guessScheme());
-    // Refine with the real keyboard layout when the browser can tell us.
     detectScheme().then((scheme) => {
       if (scheme !== this.scheme) this.applyScheme(scheme);
     });
@@ -49,20 +52,81 @@ export class WorldScene extends Phaser.Scene {
       saveScheme(next);
       this.applyScheme(next);
     });
+
+    this.cameras.main.setBackgroundColor('#05050a');
+    this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
   }
 
   update() {
-    const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const left = this.cursors.left.isDown || this.moveKeys.left.isDown;
-    const right = this.cursors.right.isDown || this.moveKeys.right.isDown;
-    const up = this.cursors.up.isDown || this.moveKeys.up.isDown;
-    const down = this.cursors.down.isDown || this.moveKeys.down.isDown;
+    if (this.transitioning) return;
+    this.mover.update(this.readDirection());
+  }
 
-    body.setVelocity(
-      left ? -SPEED : right ? SPEED : 0,
-      up ? -SPEED : down ? SPEED : 0,
-    );
-    body.velocity.normalize().scale(SPEED);
+  private readDirection(): Facing | null {
+    const k = this.moveKeys;
+    if (this.cursors.up.isDown || k.up.isDown) return 'up';
+    if (this.cursors.down.isDown || k.down.isDown) return 'down';
+    if (this.cursors.left.isDown || k.left.isDown) return 'left';
+    if (this.cursors.right.isDown || k.right.isDown) return 'right';
+    return null;
+  }
+
+  private loadMap(name: string, entryX?: number, entryY?: number) {
+    if (this.map) this.map.destroy();
+
+    const def = MAPS[name]();
+    this.def = def;
+
+    this.map = this.make.tilemap({
+      tileWidth: TILE,
+      tileHeight: TILE,
+      width: def.width,
+      height: def.height,
+    });
+    const tileset = this.map.addTilesetImage('tiles', 'tiles', TILE, TILE, 0, 0)!;
+    const ground = this.map.createBlankLayer('ground', tileset)!;
+    const objects = this.map.createBlankLayer('objects', tileset)!;
+    ground.putTilesAt(def.ground, 0, 0);
+    objects.putTilesAt(def.objects, 0, 0);
+    ground.setDepth(0);
+    objects.setDepth(1);
+
+    const px = def.width * TILE;
+    const py = def.height * TILE;
+    this.cameras.main.setBounds(0, 0, px, py);
+
+    const sx = entryX ?? def.spawn.x;
+    const sy = entryY ?? def.spawn.y;
+    if (this.mover) {
+      this.mover.place(sx, sy);
+    } else {
+      this.mover = new GridMovement(this, this.player, sx, sy, {
+        isBlocked: (tx, ty) => this.isBlocked(tx, ty),
+        onArrive: (tx, ty) => this.onArrive(tx, ty),
+      });
+    }
+  }
+
+  private isBlocked(tx: number, ty: number): boolean {
+    if (tx < 0 || ty < 0 || tx >= this.def.width || ty >= this.def.height) return true;
+    if (this.def.ground[ty][tx] === T.VOID) return true;
+    return SOLID_TILES.has(this.def.objects[ty][tx]);
+  }
+
+  private onArrive(tx: number, ty: number) {
+    const door = this.def.doors.find((d) => d.x === tx && d.y === ty);
+    if (door) this.transition(door.to, door.toX, door.toY);
+  }
+
+  private transition(to: string, toX: number, toY: number) {
+    this.transitioning = true;
+    const cam = this.cameras.main;
+    cam.fadeOut(180, 5, 5, 10);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.loadMap(to, toX, toY);
+      cam.fadeIn(180, 5, 5, 10);
+      this.transitioning = false;
+    });
   }
 
   private applyScheme(scheme: ControlScheme) {
@@ -78,20 +142,6 @@ export class WorldScene extends Phaser.Scene {
       right: keyboard.addKey(keys.right),
     };
     this.scheme = scheme;
-    this.hint.setText(
-      `NEON GRID — arrows / ${scheme.toUpperCase()}  ·  [K] switch layout`,
-    );
-  }
-
-  private drawGrid() {
-    const g = this.add.graphics();
-    g.lineStyle(1, 0x1c1c33, 1);
-    const { width, height } = this.scale;
-    for (let x = 0; x <= width; x += TILE) {
-      g.lineBetween(x, 0, x, height);
-    }
-    for (let y = 0; y <= height; y += TILE) {
-      g.lineBetween(0, y, width, y);
-    }
+    this.hint?.setText(`arrows / ${scheme.toUpperCase()}  ·  [K] layout`);
   }
 }

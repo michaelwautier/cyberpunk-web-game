@@ -66,11 +66,11 @@ Key design decisions:
 - Blank scene renders, deploys locally with `npm run dev`.
 - ✅ *Done when: a colored rectangle "player" moves on screen in the browser.*
 
-### M1 — Walkable World (days 2–4)
-- Load a Tiled map (placeholder cyberpunk tileset) with ground/walls/above-player layers.
-- Grid-based 4-direction movement with collision, camera follow, map bounds.
-- Map transitions (street ↔ bar interior) via Tiled trigger objects.
-- ✅ *Done when: you can walk around a small district and enter one building.*
+### M1 — Walkable World ✅ DONE
+- ~~Load a Tiled map (placeholder cyberpunk tileset) with ground/walls/above-player layers.~~ **Deviation:** the tileset + character sprites are generated procedurally at boot (`systems/textures.ts`) and maps are authored in-code (`data/maps.ts`) so M1 is fully self-contained — no external asset download or Tiled install required yet. The map loader stays modular, so real Tiled/PNG assets can drop in later without touching movement/transition code.
+- ✅ Grid-based tile-to-tile 4-direction movement (`systems/GridMovement.ts`), collision via solid-tile lookup, camera follow with lerp, map bounds.
+- ✅ Map transitions (street ↔ bar interior) via in-map door objects with fade in/out.
+- ✅ *Verified in-browser:* spawn → walk all 4 directions → walls block → enter door → land in bar at correct tile → exit door → back to street. No console errors.
 
 ### M2 — People & Words (days 5–7)
 - NPC entities from `npcs.json`, idle/wander behavior, facing the player on interact.
