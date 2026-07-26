@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { makeTilesetTexture, makePlayerTextures } from '../systems/textures';
+import { makeTilesetTexture, makePlayerTextures, makeNpcTextures } from '../systems/textures';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -17,6 +17,7 @@ export class BootScene extends Phaser.Scene {
 
     makeTilesetTexture(this);
     makePlayerTextures(this);
+    makeNpcTextures(this);
 
     this.scene.start('world');
   }

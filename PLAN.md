@@ -72,11 +72,11 @@ Key design decisions:
 - ✅ Map transitions (street ↔ bar interior) via in-map door objects with fade in/out.
 - ✅ *Verified in-browser:* spawn → walk all 4 directions → walls block → enter door → land in bar at correct tile → exit door → back to street. No console errors.
 
-### M2 — People & Words (days 5–7)
-- NPC entities from `npcs.json`, idle/wander behavior, facing the player on interact.
-- Dialog engine: typewriter text box, portraits, branching choices.
-- Interaction key (Space/E) targeting the tile the player faces.
-- ✅ *Done when: three NPCs hold branching conversations.*
+### M2 — People & Words ✅ DONE
+- ✅ NPC entities from `data/npcs.ts` (`systems/Npc.ts`): distinct palettes, wander within a home radius, block movement, face the player on interact.
+- ✅ Dialog engine (`systems/Dialog.ts`): typewriter text, speaker portrait, branching choices with a cursor; drives itself from `data/dialogs.ts` trees.
+- ✅ Interaction key (Space / E / Enter) targets the tile the player faces.
+- ✅ *Verified in-browser:* three NPCs (VEX, GLITCH, RIX) across street + bar; branching flow tested — navigate choices, pick the 3rd option, land on the correct branch node, close and reset. No console errors.
 
 ### M3 — Combat (days 8–12)
 - Turn-based battle scene (Pokémon-style: menu of actions, enemy front view or side view).

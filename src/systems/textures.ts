@@ -112,45 +112,95 @@ export function makeTilesetTexture(scene: Phaser.Scene) {
 const DIRS = ['down', 'up', 'left', 'right'] as const;
 export type Facing = (typeof DIRS)[number];
 
-function drawPlayer(ctx: Ctx, facing: Facing) {
-  const skin = '#c99a6a';
-  const jacket = '#26264a';
-  const accent = '#ff2fd6';
-  const legs = '#14141f';
-  const visor = '#34ffd6';
+export interface Palette {
+  skin: string;
+  jacket: string;
+  accent: string;
+  legs: string;
+  visor: string;
+  hood: string;
+}
 
+export const PLAYER_PALETTE: Palette = {
+  skin: '#c99a6a',
+  jacket: '#26264a',
+  accent: '#ff2fd6',
+  legs: '#14141f',
+  visor: '#34ffd6',
+  hood: '#1c1428',
+};
+
+/** NPC appearances, keyed by sprite name used in npc data. */
+export const NPC_PALETTES: Record<string, Palette> = {
+  'npc-rix': {
+    skin: '#b98a5a',
+    jacket: '#3a2a12',
+    accent: '#ffb43f',
+    legs: '#241a10',
+    visor: '#ffd27f',
+    hood: '#2a1e0c',
+  },
+  'npc-glitch': {
+    skin: '#a8c0a0',
+    jacket: '#10241a',
+    accent: '#34ff9e',
+    legs: '#0e1a14',
+    visor: '#9effd0',
+    hood: '#0b1a12',
+  },
+  'npc-vex': {
+    skin: '#c08a8a',
+    jacket: '#2a1020',
+    accent: '#ff2f6d',
+    legs: '#1a0e14',
+    visor: '#ff9ec0',
+    hood: '#1e0b16',
+  },
+};
+
+function drawCharacter(ctx: Ctx, facing: Facing, p: Palette) {
   // legs
-  px(ctx, 5, 12, 2, 3, legs);
-  px(ctx, 9, 12, 2, 3, legs);
+  px(ctx, 5, 12, 2, 3, p.legs);
+  px(ctx, 9, 12, 2, 3, p.legs);
   // torso / jacket
-  px(ctx, 4, 6, 8, 6, jacket);
-  px(ctx, 4, 6, 8, 1, accent); // shoulder trim
+  px(ctx, 4, 6, 8, 6, p.jacket);
+  px(ctx, 4, 6, 8, 1, p.accent); // shoulder trim
   // head
-  px(ctx, 5, 2, 6, 4, skin);
+  px(ctx, 5, 2, 6, 4, p.skin);
 
   switch (facing) {
     case 'down':
-      px(ctx, 5, 3, 6, 1, visor);
+      px(ctx, 5, 3, 6, 1, p.visor);
       break;
     case 'up':
-      px(ctx, 5, 2, 6, 2, '#1c1428'); // back of hood
+      px(ctx, 5, 2, 6, 2, p.hood); // back of head
       break;
     case 'left':
-      px(ctx, 5, 3, 3, 1, visor);
-      px(ctx, 4, 6, 1, 6, '#1c1c38'); // arm forward
+      px(ctx, 5, 3, 3, 1, p.visor);
+      px(ctx, 4, 6, 1, 6, p.hood); // arm forward
       break;
     case 'right':
-      px(ctx, 8, 3, 3, 1, visor);
-      px(ctx, 11, 6, 1, 6, '#1c1c38');
+      px(ctx, 8, 3, 3, 1, p.visor);
+      px(ctx, 11, 6, 1, 6, p.hood);
       break;
   }
 }
 
-export function makePlayerTextures(scene: Phaser.Scene) {
+function makeCharacterTextures(scene: Phaser.Scene, key: string, p: Palette) {
   for (const facing of DIRS) {
-    const canvas = scene.textures.createCanvas(`player-${facing}`, TILE, TILE);
+    const canvas = scene.textures.createCanvas(`${key}-${facing}`, TILE, TILE);
     if (!canvas) continue;
-    drawPlayer(canvas.getContext(), facing);
+    drawCharacter(canvas.getContext(), facing, p);
     canvas.refresh();
+  }
+}
+
+export function makePlayerTextures(scene: Phaser.Scene) {
+  makeCharacterTextures(scene, 'player', PLAYER_PALETTE);
+}
+
+export function makeNpcTextures(scene: Phaser.Scene) {
+  for (const [key, palette] of Object.entries(NPC_PALETTES)) {
+    makeCharacterTextures(scene, key, palette);
   }
 }

@@ -7,19 +7,28 @@ import {
   saveScheme,
 } from '../systems/Controls';
 import { TILE, SOLID_TILES, T, Facing } from '../systems/textures';
-import { GridMovement } from '../systems/GridMovement';
+import { GridMovement, DELTA } from '../systems/GridMovement';
 import { MAPS, MapDef } from '../data/maps';
+import { npcsForMap } from '../data/npcs';
+import { Npc } from '../systems/Npc';
+import { Dialog } from '../systems/Dialog';
+import { DIALOGS } from '../data/dialogs';
+
+const JustDown = Phaser.Input.Keyboard.JustDown;
 
 export class WorldScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
   private mover!: GridMovement;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private moveKeys!: Record<Facing, Phaser.Input.Keyboard.Key>;
+  private interactKeys!: Phaser.Input.Keyboard.Key[];
   private scheme!: ControlScheme;
   private hint!: Phaser.GameObjects.Text;
 
   private map!: Phaser.Tilemaps.Tilemap;
   private def!: MapDef;
+  private npcs: Npc[] = [];
+  private dialog!: Dialog;
   private transitioning = false;
 
   constructor() {
@@ -28,8 +37,14 @@ export class WorldScene extends Phaser.Scene {
 
   create() {
     this.cursors = this.input.keyboard!.createCursorKeys();
+    this.interactKeys = [
+      this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
+      this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+      this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
+    ];
 
     this.player = this.add.sprite(0, 0, 'player-down').setDepth(10);
+    this.dialog = new Dialog(this);
 
     this.loadMap('street');
 
@@ -57,9 +72,33 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.15, 0.15);
   }
 
-  update() {
+  update(time: number) {
+    if (this.dialog.isOpen) {
+      if (this.interactPressed()) this.dialog.advance();
+      else if (this.upPressed()) this.dialog.moveCursor(-1);
+      else if (this.downPressed()) this.dialog.moveCursor(1);
+      return;
+    }
+
     if (this.transitioning) return;
+
+    if (this.interactPressed()) {
+      this.tryInteract();
+      return;
+    }
+
+    for (const npc of this.npcs) npc.update(time);
     this.mover.update(this.readDirection());
+  }
+
+  private interactPressed(): boolean {
+    return this.interactKeys.some((k) => JustDown(k));
+  }
+  private upPressed(): boolean {
+    return JustDown(this.cursors.up) || JustDown(this.moveKeys.up);
+  }
+  private downPressed(): boolean {
+    return JustDown(this.cursors.down) || JustDown(this.moveKeys.down);
   }
 
   private readDirection(): Facing | null {
@@ -71,8 +110,24 @@ export class WorldScene extends Phaser.Scene {
     return null;
   }
 
+  private tryInteract() {
+    const [dx, dy] = DELTA[this.mover.facing];
+    const tx = this.mover.tileX + dx;
+    const ty = this.mover.tileY + dy;
+    const npc = this.npcAt(tx, ty);
+    if (!npc) return;
+
+    npc.talking = true;
+    npc.facePlayer(this.mover.facing);
+    this.dialog.start(DIALOGS[npc.def.dialog], npc.def.name, `${npc.def.sprite}-down`, () => {
+      npc.talking = false;
+    });
+  }
+
   private loadMap(name: string, entryX?: number, entryY?: number) {
     if (this.map) this.map.destroy();
+    for (const npc of this.npcs) npc.destroy();
+    this.npcs = [];
 
     const def = MAPS[name]();
     this.def = def;
@@ -91,9 +146,7 @@ export class WorldScene extends Phaser.Scene {
     ground.setDepth(0);
     objects.setDepth(1);
 
-    const px = def.width * TILE;
-    const py = def.height * TILE;
-    this.cameras.main.setBounds(0, 0, px, py);
+    this.cameras.main.setBounds(0, 0, def.width * TILE, def.height * TILE);
 
     const sx = entryX ?? def.spawn.x;
     const sy = entryY ?? def.spawn.y;
@@ -101,16 +154,41 @@ export class WorldScene extends Phaser.Scene {
       this.mover.place(sx, sy);
     } else {
       this.mover = new GridMovement(this, this.player, sx, sy, {
-        isBlocked: (tx, ty) => this.isBlocked(tx, ty),
+        isBlocked: (tx, ty) => this.playerBlocked(tx, ty),
         onArrive: (tx, ty) => this.onArrive(tx, ty),
       });
     }
+
+    for (const nDef of npcsForMap(name)) {
+      this.npcs.push(
+        new Npc(this, nDef, {
+          isBlocked: (tx, ty) => this.npcBlocked(tx, ty, nDef.id),
+        }),
+      );
+    }
   }
 
-  private isBlocked(tx: number, ty: number): boolean {
+  private worldBlocked(tx: number, ty: number): boolean {
     if (tx < 0 || ty < 0 || tx >= this.def.width || ty >= this.def.height) return true;
     if (this.def.ground[ty][tx] === T.VOID) return true;
     return SOLID_TILES.has(this.def.objects[ty][tx]);
+  }
+
+  private npcAt(tx: number, ty: number, exceptId?: string): Npc | null {
+    return (
+      this.npcs.find((n) => n.def.id !== exceptId && n.tileX === tx && n.tileY === ty) ?? null
+    );
+  }
+
+  private playerBlocked(tx: number, ty: number): boolean {
+    return this.worldBlocked(tx, ty) || !!this.npcAt(tx, ty);
+  }
+
+  private npcBlocked(tx: number, ty: number, selfId: string): boolean {
+    if (this.worldBlocked(tx, ty)) return true;
+    if (this.def.objects[ty][tx] === T.DOOR) return true; // keep NPCs out of doorways
+    if (this.mover && this.mover.tileX === tx && this.mover.tileY === ty) return true;
+    return !!this.npcAt(tx, ty, selfId);
   }
 
   private onArrive(tx: number, ty: number) {
@@ -142,6 +220,6 @@ export class WorldScene extends Phaser.Scene {
       right: keyboard.addKey(keys.right),
     };
     this.scheme = scheme;
-    this.hint?.setText(`arrows / ${scheme.toUpperCase()}  ·  [K] layout`);
+    this.hint?.setText(`arrows / ${scheme.toUpperCase()}  ·  [space] talk  ·  [K] layout`);
   }
 }

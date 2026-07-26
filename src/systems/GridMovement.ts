@@ -3,7 +3,7 @@ import { TILE, Facing } from './textures';
 
 const DURATION = 140;
 
-const DELTA: Record<Facing, [number, number]> = {
+export const DELTA: Record<Facing, [number, number]> = {
   down: [0, 1],
   up: [0, -1],
   left: [-1, 0],
@@ -32,6 +32,7 @@ export class GridMovement {
     tileX: number,
     tileY: number,
     private opts: GridOptions,
+    private prefix = 'player',
   ) {
     this.tileX = tileX;
     this.tileY = tileY;
@@ -74,15 +75,14 @@ export class GridMovement {
     });
   }
 
-  private face(dir: Facing) {
-    if (this.facing !== dir) {
-      this.facing = dir;
-    }
-    this.sprite.setTexture(`player-${dir}`);
+  /** Turn to face a direction without moving. */
+  face(dir: Facing) {
+    this.facing = dir;
+    this.sprite.setTexture(`${this.prefix}-${dir}`);
   }
 
   private snap() {
     this.sprite.setPosition(this.tileX * TILE + TILE / 2, this.tileY * TILE + TILE / 2);
-    this.sprite.setTexture(`player-${this.facing}`);
+    this.sprite.setTexture(`${this.prefix}-${this.facing}`);
   }
 }
